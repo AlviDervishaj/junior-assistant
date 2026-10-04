@@ -37,6 +37,7 @@ Usage: assistant [--data-dir DIR] [--json] COMMAND [OPTIONS]
   task edit ID [--title TEXT] [--notes TEXT] [--type task|bug]
                [--planned DATE | --clear-planned] [--due DATE | --clear-due]
                [--clear-notes] [--project NAME | --personal]
+  task log ID TEXT | logs ID
   task start ID | done ID | cancel ID | reopen ID | delete ID [--yes]
   today
   export PATH
@@ -323,10 +324,22 @@ func (a *app) print(v any, warnings []string) error {
 		if len(x) == 0 {
 			fmt.Fprintln(a.out, "No search roots.")
 		}
+	case model.ProgressLog:
+		a.logLine(x)
+	case []model.ProgressLog:
+		for _, entry := range x {
+			a.logLine(entry)
+		}
+		if len(x) == 0 {
+			fmt.Fprintln(a.out, "No progress logs.")
+		}
 	case model.Record:
 		a.recordLine(x)
 		if x.Notes != "" {
 			fmt.Fprintln(a.out, "  Notes:", safe(x.Notes))
+		}
+		for _, entry := range x.Logs {
+			a.logLine(entry)
 		}
 	case []model.Record:
 		for _, r := range x {
@@ -598,6 +611,9 @@ func (a *app) task(args []string) error {
 		return usage("task requires a subcommand")
 	}
 	cmd := args[0]
+	if cmd == "log" || cmd == "logs" {
+		return a.taskLogs(cmd, args[1:])
+	}
 	f := a.flags("task " + cmd)
 	n := 1
 	var title, notes, kind, planned, due string
@@ -795,4 +811,43 @@ func (a *app) backup(cmd string, args []string) error {
 		return e
 	}
 	return a.print("Backup restored.", warnings)
+}
+
+func (a *app) logLine(entry model.ProgressLog) {
+	fmt.Fprintf(a.out, "  %d  %s  %s\n", entry.ID, safe(entry.CreatedAt), safe(entry.Message))
+}
+func (a *app) taskLogs(cmd string, args []string) error {
+	f := a.flags("task " + cmd)
+	n := 1
+	if cmd == "log" {
+		n = 2
+	}
+	xs, e := f.parse(args, n)
+	if e != nil {
+		return e
+	}
+	rid, e := id(xs[0])
+	if e != nil {
+		return e
+	}
+	if cmd == "logs" {
+		s, e := a.state()
+		if e != nil {
+			return e
+		}
+		entries, e := records.Logs(s, rid)
+		if e != nil {
+			return e
+		}
+		return a.print(entries, nil)
+	}
+	if strings.TrimSpace(xs[1]) == "" {
+		return usage("progress message must not be empty")
+	}
+	var entry model.ProgressLog
+	e = a.update(func(s *model.State) error { var e error; entry, e = records.Log(s, rid, xs[1], time.Now()); return e })
+	if e != nil {
+		return e
+	}
+	return a.print(entry, nil)
 }

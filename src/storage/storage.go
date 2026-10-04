@@ -52,8 +52,8 @@ func Open(ctx context.Context, dir string) (*Store, error) {
 	defer func() { conn.ExecContext(context.Background(), "ROLLBACK"); conn.Close() }()
 	var version int
 	e = conn.QueryRowContext(ctx, "PRAGMA user_version").Scan(&version)
-	if e == nil && version > 1 {
-		e = fmt.Errorf("database schema %d is newer than supported schema 1", version)
+	if e == nil && version > 2 {
+		e = fmt.Errorf("database schema %d is newer than supported schema 2", version)
 	}
 	if e == nil && version == 0 {
 		_, e = conn.ExecContext(ctx, `CREATE TABLE counters (singleton INTEGER PRIMARY KEY CHECK(singleton=1), project INTEGER NOT NULL, root INTEGER NOT NULL, record INTEGER NOT NULL);
@@ -67,6 +67,10 @@ CREATE TABLE records (id INTEGER PRIMARY KEY, type TEXT NOT NULL, project_id INT
 CREATE TABLE preferences (key TEXT PRIMARY KEY, value TEXT NOT NULL);
 PRAGMA user_version=1;`)
 	}
+	if e == nil && version < 2 {
+		_, e = conn.ExecContext(ctx, `ALTER TABLE records ADD COLUMN progress_logs TEXT NOT NULL DEFAULT '[]'; PRAGMA user_version=2;`)
+	}
+
 	if e == nil {
 		_, e = conn.ExecContext(ctx, "COMMIT")
 	}
@@ -129,13 +133,18 @@ func load(ctx context.Context, tx queryer) (model.State, error) {
 	if err != nil {
 		return state, err
 	}
-	rows, err = tx.QueryContext(ctx, "SELECT id,type,COALESCE(project_id,0),title,notes,status,planned,due FROM records ORDER BY id")
+	rows, err = tx.QueryContext(ctx, "SELECT id,type,COALESCE(project_id,0),title,notes,status,planned,due,progress_logs FROM records ORDER BY id")
 	if err != nil {
 		return state, err
 	}
 	for rows.Next() {
 		var r model.Record
-		if err = rows.Scan(&r.ID, &r.Type, &r.ProjectID, &r.Title, &r.Notes, &r.Status, &r.Planned, &r.Due); err != nil {
+		var logs string
+		err = rows.Scan(&r.ID, &r.Type, &r.ProjectID, &r.Title, &r.Notes, &r.Status, &r.Planned, &r.Due, &logs)
+		if err == nil {
+			err = json.Unmarshal([]byte(logs), &r.Logs)
+		}
+		if err != nil {
 			rows.Close()
 			return state, err
 		}
@@ -227,7 +236,15 @@ func save(ctx context.Context, c *sql.Conn, s model.State) error {
 		}
 	}
 	for _, r := range s.Records {
-		if _, e := c.ExecContext(ctx, "INSERT INTO records VALUES(?,?,?,?,?,?,?,?)", r.ID, r.Type, nullable(r.ProjectID), r.Title, r.Notes, r.Status, r.Planned, r.Due); e != nil {
+		logs := r.Logs
+		if logs == nil {
+			logs = []model.ProgressLog{}
+		}
+		encoded, e := json.Marshal(logs)
+		if e != nil {
+			return e
+		}
+		if _, e := c.ExecContext(ctx, "INSERT INTO records VALUES(?,?,?,?,?,?,?,?,?)", r.ID, r.Type, nullable(r.ProjectID), r.Title, r.Notes, r.Status, r.Planned, r.Due, string(encoded)); e != nil {
 			return e
 		}
 	}

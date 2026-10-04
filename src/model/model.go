@@ -20,15 +20,22 @@ type Root struct {
 	ProjectID  int64    `json:"project_id,omitempty"`
 	Exclusions []string `json:"exclusions"`
 }
-type Record struct {
+type ProgressLog struct {
 	ID        int64  `json:"id"`
-	Type      string `json:"type"`
-	ProjectID int64  `json:"project_id,omitempty"`
-	Title     string `json:"title"`
-	Notes     string `json:"notes"`
-	Status    string `json:"status"`
-	Planned   string `json:"planned_date,omitempty"`
-	Due       string `json:"due_date,omitempty"`
+	CreatedAt string `json:"created_at"`
+	Message   string `json:"message"`
+}
+
+type Record struct {
+	ID        int64         `json:"id"`
+	Type      string        `json:"type"`
+	ProjectID int64         `json:"project_id,omitempty"`
+	Title     string        `json:"title"`
+	Notes     string        `json:"notes"`
+	Status    string        `json:"status"`
+	Planned   string        `json:"planned_date,omitempty"`
+	Due       string        `json:"due_date,omitempty"`
+	Logs      []ProgressLog `json:"progress_logs,omitempty"`
 }
 
 func (r Record) Active() bool { return r.Status == "open" || r.Status == "in-progress" }
@@ -72,7 +79,18 @@ func ValidRecord(r Record) error {
 	if err := Date(r.Planned); err != nil {
 		return err
 	}
-	return Date(r.Due)
+	if e := Date(r.Due); e != nil {
+		return e
+	}
+	for i, entry := range r.Logs {
+		if entry.ID != int64(i+1) || strings.TrimSpace(entry.Message) == "" {
+			return errors.New("invalid progress log identity or message")
+		}
+		if _, e := time.Parse(time.RFC3339Nano, entry.CreatedAt); e != nil {
+			return errors.New("invalid progress log timestamp")
+		}
+	}
+	return nil
 }
 func Name(s string) bool { return strings.TrimSpace(s) != "" && !strings.ContainsAny(s, "/\\\x00\n\r") }
 func ValidExclusions(xs []string) error {

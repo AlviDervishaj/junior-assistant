@@ -3,6 +3,8 @@ package records
 import (
 	"fmt"
 	"github.com/AlviDervishaj/junior-assistant/src/model"
+	"strings"
+	"time"
 )
 
 type Scope struct {
@@ -96,4 +98,37 @@ func Delete(s *model.State, id int64) error {
 		}
 	}
 	return fmt.Errorf("record %d not found", id)
+}
+
+// Log appends history without changing the record's notes, status, or ownership.
+func Log(s *model.State, id int64, message string, now time.Time) (model.ProgressLog, error) {
+	r, e := Find(*s, id)
+	if e != nil {
+		return model.ProgressLog{}, e
+	}
+	if strings.TrimSpace(message) == "" {
+		return model.ProgressLog{}, fmt.Errorf("progress message must not be empty")
+	}
+	entry := model.ProgressLog{ID: int64(len(r.Logs) + 1), CreatedAt: now.UTC().Format(time.RFC3339Nano), Message: message}
+	r.Logs = append(r.Logs, entry)
+	if e = model.ValidRecord(r); e != nil {
+		return model.ProgressLog{}, e
+	}
+	for i, old := range s.Records {
+		if old.ID == id {
+			s.Records[i] = r
+			break
+		}
+	}
+	return entry, nil
+}
+func Logs(s model.State, id int64) ([]model.ProgressLog, error) {
+	r, e := Find(s, id)
+	if e != nil {
+		return nil, e
+	}
+	if r.Logs == nil {
+		return []model.ProgressLog{}, nil
+	}
+	return r.Logs, nil
 }

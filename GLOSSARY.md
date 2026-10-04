@@ -34,3 +34,6 @@ An unfinished record whose planned date is before today.
 
 **Active record**:
 A record with status open or in-progress.
+
+**Progress log**:
+An append-only, timestamped entry describing progress on a record. It supplements the record's editable notes without changing its status.

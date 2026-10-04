@@ -30,7 +30,7 @@ func Export(ctx context.Context, s *storage.Store, path string) error {
 	if e = state.Validate(); e != nil {
 		return e
 	}
-	bytes, e := json.MarshalIndent(Document{1, state}, "", "  ")
+	bytes, e := json.MarshalIndent(Document{2, state}, "", "  ")
 	if e != nil {
 		return e
 	}
@@ -67,8 +67,15 @@ func Decode(r io.Reader) (model.State, error) {
 	if e := d.Decode(&extra); e != io.EOF {
 		return model.State{}, errors.New("backup must contain exactly one JSON document")
 	}
-	if doc.Version != 1 {
+	if doc.Version != 1 && doc.Version != 2 {
 		return model.State{}, fmt.Errorf("unsupported backup version %d", doc.Version)
+	}
+	if doc.Version == 1 {
+		for _, r := range doc.State.Records {
+			if len(r.Logs) > 0 {
+				return model.State{}, errors.New("version 1 backups cannot contain progress logs")
+			}
+		}
 	}
 	if e := doc.State.Validate(); e != nil {
 		return model.State{}, e
