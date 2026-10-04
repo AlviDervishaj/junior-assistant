@@ -124,3 +124,37 @@ func TestInvalidBackupLeavesDatabaseUnchanged(t *testing.T) {
 		t.Fatal("missing counters accepted")
 	}
 }
+
+func TestLegacyBackupRestoreAndInvalidHistory(t *testing.T) {
+	ctx := context.Background()
+	db, e := storage.Open(ctx, t.TempDir())
+	if e != nil {
+		t.Fatal(e)
+	}
+	defer db.Close()
+	st := model.Empty()
+	st.NextRecord = 2
+	st.Records = []model.Record{{ID: 1, Type: "task", Title: "legacy", Notes: "unchanged", Status: "open"}}
+	path := filepath.Join(t.TempDir(), "v1.json")
+	data, _ := json.Marshal(Document{1, st})
+	os.WriteFile(path, data, 0600)
+	if _, e = Restore(ctx, db, path, nil); e != nil {
+		t.Fatal(e)
+	}
+	got, _ := db.Read(ctx)
+	if got.Records[0].Notes != "unchanged" || len(got.Records[0].Logs) != 0 {
+		t.Fatal("legacy restore changed record")
+	}
+	for _, entry := range []model.ProgressLog{{ID: 1, CreatedAt: "invalid", Message: "work"}, {ID: 2, CreatedAt: "2026-10-04T19:00:00Z", Message: "work"}, {ID: 1, CreatedAt: "2026-10-04T19:00:00Z", Message: " "}} {
+		st.Records[0].Logs = []model.ProgressLog{entry}
+		data, _ = json.Marshal(Document{2, st})
+		if _, e = Decode(strings.NewReader(string(data))); e == nil {
+			t.Fatal("invalid history accepted")
+		}
+	}
+	st.Records[0].Logs = []model.ProgressLog{{ID: 1, CreatedAt: "2026-10-04T19:00:00Z", Message: "valid"}}
+	data, _ = json.Marshal(Document{1, st})
+	if _, e = Decode(strings.NewReader(string(data))); e == nil {
+		t.Fatal("logs accepted in V1 document")
+	}
+}

@@ -188,3 +188,51 @@ func TestTerminalDiagnosticsEscapePathControlsButJSONPreservesThem(t *testing.T)
 		t.Fatal("JSON changed the original path")
 	}
 }
+
+func TestTaskProgressHistoryAndBackup(t *testing.T) {
+	dir := t.TempDir()
+	invoke(t, dir, 0, "task", "add", "Investigate", "--type", "bug", "--notes", "keep notes", "--personal")
+	data := invoke(t, dir, 0, "task", "logs", "1")
+	if string(data) != "[]" {
+		t.Fatalf("empty logs %s", data)
+	}
+	invoke(t, dir, 0, "task", "log", "1", "Reproduced after sleep")
+	invoke(t, dir, 0, "task", "done", "1")
+	invoke(t, dir, 0, "task", "log", "1", "Validated fix\x1b[2J")
+	invoke(t, dir, 2, "task", "log", "1", "  ")
+	invoke(t, dir, 1, "task", "log", "999", "unknown")
+	var entries []struct {
+		ID        int64  `json:"id"`
+		Message   string `json:"message"`
+		CreatedAt string `json:"created_at"`
+	}
+	data = invoke(t, dir, 0, "task", "logs", "1")
+	if e := json.Unmarshal(data, &entries); e != nil {
+		t.Fatal(e)
+	}
+	if len(entries) != 2 || entries[1].ID != 2 || entries[1].Message != "Validated fix\x1b[2J" {
+		t.Fatalf("history %s", data)
+	}
+	if _, e := time.Parse(time.RFC3339Nano, entries[0].CreatedAt); e != nil {
+		t.Fatal(e)
+	}
+	path := filepath.Join(t.TempDir(), "backup.json")
+	invoke(t, dir, 0, "export", path)
+	target := t.TempDir()
+	invoke(t, target, 0, "restore", path)
+	if got := invoke(t, target, 0, "task", "logs", "1"); !bytes.Equal(got, data) {
+		t.Fatalf("restore lost logs %s", got)
+	}
+	var record struct{ Notes, Status string }
+	json.Unmarshal(invoke(t, target, 0, "task", "show", "1"), &record)
+	if record.Notes != "keep notes" || record.Status != "done" {
+		t.Fatal("history changed record")
+	}
+	var out, err bytes.Buffer
+	code := Run(context.Background(), []string{"--data-dir", target, "task", "show", "1"}, nil, &out, &err)
+	if code != 0 || !bytes.Contains(out.Bytes(), []byte("Reproduced after sleep")) || bytes.Contains(out.Bytes(), []byte{0x1b}) {
+		t.Fatalf("show history %d %s", code, &out)
+	}
+	invoke(t, target, 0, "task", "delete", "1", "--yes")
+	invoke(t, target, 1, "task", "logs", "1")
+}

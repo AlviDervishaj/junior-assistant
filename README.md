@@ -11,6 +11,7 @@ go build -o bin/assistant ./cmd/assistant
 ./bin/assistant --help
 ./bin/assistant project add junior-assistant "$PWD"
 ./bin/assistant task add "Try the assistant" --planned "$(date +%F)"
+./bin/assistant task log 1 "Started trying the assistant"
 ./bin/assistant today
 ./bin/assistant find README
 ```
@@ -21,7 +22,7 @@ Optionally install the executable into Go's binary directory (normally `~/go/bin
 go install ./cmd/assistant
 ```
 
-See the [command reference](docs/commands.md) for scopes, search exclusions, backup/restore, output contracts, and exit codes.
+Tasks and bugs support [dated progress logs](docs/progress-logs.md). See the [command reference](docs/commands.md) for scopes, search exclusions, backup/restore, output contracts, and exit codes.
 
 ## Verify
 

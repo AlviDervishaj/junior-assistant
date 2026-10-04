@@ -50,10 +50,14 @@ with tempfile.TemporaryDirectory(prefix="assistant-smoke-") as tmp:
     assert task["id"] == 1 and task["project_id"] == 1
     run("task", "edit", "1", "--notes", "Reproduce after sleep", "--due", day)
     run("task", "start", "1")
+    run("task", "log", "1", "Reproduced after sleep")
     groups = run("today")
     assert sum(len(g["records"]) for g in groups) == 1
     assert groups[1]["records"][0]["id"] == 1
     run("task", "done", "1")
+    run("task", "log", "1", "Verified the fix")
+    history = run("task", "logs", "1")
+    assert [entry["id"] for entry in history] == [1, 2]
     assert run("task", "list") == []
     run("task", "reopen", "1")
     run("task", "add", "Renew passport", "--personal")
@@ -74,8 +78,9 @@ with tempfile.TemporaryDirectory(prefix="assistant-smoke-") as tmp:
     run("export", str(backup), expected=1)
     run("restore", str(backup), expected=1)
     run("restore", str(backup), destination=restored)
+    assert run("task", "logs", "1", destination=restored) == history
     records = run("task", "list", "--all", destination=restored)
     assert [r["id"] for r in records] == [1, 3]
     assert run("task", "add", "After restore", "--personal", destination=restored)["id"] == 4
     assert original == {str(p): p.read_bytes() for p in project.rglob("*") if p.is_file()}
-    print(f"PASS: {calls} CLI calls with runtime network denied; search, lifecycle, archive, today, and backup/restore verified; fixture files unchanged.")
+    print(f"PASS: {calls} CLI calls with runtime network denied; search, lifecycle, archive, progress logs, today, and backup/restore verified; fixture files unchanged.")

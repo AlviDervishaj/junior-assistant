@@ -50,6 +50,8 @@ assistant task show 42
 assistant task edit 42 --title "Fix session expiry" --planned 2026-10-06
 assistant task edit 42 --clear-planned --clear-due --clear-notes
 assistant task edit 42 --personal
+assistant task log 42 "Reproduced after sleep"
+assistant task logs 42
 assistant task start 42
 assistant task done 42
 assistant task cancel 42
@@ -62,6 +64,8 @@ Records have numeric IDs that are never reused, type task/bug, title, notes, opt
 Creation infers your project, otherwise personal work. `--project NAME` or `--personal` overrides it. List defaults to the current project, otherwise all records. `--all`, `--project`, and `--personal` are mutually exclusive. Show/edit/lifecycle commands identify records directly by ID, regardless of your current directory. Edit keeps ownership unless explicitly changed. All lifecycle corrections are allowed; reopening sets open. Done/cancelled records are hidden from list unless `--include-finished` is supplied.
 
 Cancellation retains a record. Permanent deletion prompts on a real interactive terminal, requiring the literal answer `yes`. Noninteractive or JSON deletion requires `--yes`; piped approval is not accepted.
+
+Progress logs supplement notes without changing status. See [progress logs](progress-logs.md) for commands, backup compatibility, and migration/rollback details.
 
 ## Today
 
@@ -84,15 +88,15 @@ assistant --data-dir /new/empty/state restore "$HOME/assistant-backup.json" \
   --remap /old/home/Projects=/new/home/Projects
 ```
 
-Exports are versioned JSON with records, stable IDs/counters, active and archived projects, independent/project roots, settings and exclusions. They contain paths and notes, so keep backups private. They contain no searched file contents. Existing export destinations are never overwritten.
+Exports use version 2 JSON with records and progress logs, stable IDs/counters, active and archived projects, independent/project roots, settings and exclusions. They contain paths and notes, so keep backups private. They contain no searched file contents. Existing export destinations are never overwritten.
 
-Restore requires a fresh, empty application database, including untouched ID counters. It validates the document and relationships before committing a single transaction; failed restore preserves state. Unsupported versions and unknown fields are rejected. Path mappings use absolute source prefixes; the longest match wins, once per original path. Mappings cannot create duplicate active project paths or independent roots. Missing paths warn and stay registered for later reconnection. Keep the original database until you have inspected a transfer.
+Restore requires a fresh, empty application database, including untouched ID counters. Version 1 backups remain readable by the new build. It validates the document and relationships before committing a single transaction; failed restore preserves state. Unsupported versions and unknown fields are rejected. Path mappings use absolute source prefixes; the longest match wins, once per original path. Mappings cannot create duplicate active project paths or independent roots. Missing paths warn and stay registered for later reconnection. Keep the original database until you have inspected a transfer.
 
 ## Output and exit codes
 
 Every successful `--json` command emits one JSON object: `{"data": ..., "warnings": []}`. Warnings also go to stderr. No prompts or formatted text are mixed into JSON stdout. Failed commands emit diagnostics to stderr without a success object.
 
-Data is a project/root/record object for a single-object command; an array for lists; category/records groups for today; a string for successful delete/root removal/export/restore; and a search object containing `matches`, `total`, `truncated`, and `warnings` for find. Search matches have `path`, `kind` (file/directory/symlink), and `rank` (0 exact filename, 1 prefix, 2 substring, 3 path). Project/root/record ownership uses stable numeric IDs; project ID 0 or an omitted JSON project_id means personal/independent. Result rows escape control characters in names, titles, and paths.
+Data is a project/root/record object for a single-object command; an entry object for task log and an entry array for task logs; an array for lists; category/records groups for today; a string for successful delete/root removal/export/restore; and a search object containing `matches`, `total`, `truncated`, and `warnings` for find. Search matches have `path`, `kind` (file/directory/symlink), and `rank` (0 exact filename, 1 prefix, 2 substring, 3 path). Project/root/record ownership uses stable numeric IDs; project ID 0 or an omitted JSON project_id means personal/independent. Result rows escape control characters in names, titles, and paths.
 
 | Code | Meaning |
 | --- | --- |
