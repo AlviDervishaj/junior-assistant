@@ -80,7 +80,7 @@ func Run(ctx context.Context, args []string, in io.Reader, out, errOut io.Writer
 	g.BoolVar(&h, "h", false, "help")
 	e := g.Parse(args)
 	if e != nil {
-		fmt.Fprintln(errOut, e)
+		fmt.Fprintln(errOut, safe(e.Error()))
 		return 2
 	}
 	args = g.Args()
@@ -92,7 +92,7 @@ func Run(ctx context.Context, args []string, in io.Reader, out, errOut io.Writer
 	if e == nil {
 		return code
 	}
-	fmt.Fprintln(errOut, "error:", e)
+	fmt.Fprintln(errOut, "error:", safe(e.Error()))
 	if errors.Is(e, context.Canceled) {
 		return 130
 	}
@@ -293,7 +293,7 @@ func (a *app) print(v any, warnings []string) error {
 		warnings = []string{}
 	}
 	for _, w := range warnings {
-		fmt.Fprintln(a.err, "warning:", w)
+		fmt.Fprintln(a.err, "warning:", safe(w))
 	}
 	if a.json {
 		return json.NewEncoder(a.out).Encode(struct {
@@ -303,7 +303,7 @@ func (a *app) print(v any, warnings []string) error {
 	}
 	switch x := v.(type) {
 	case string:
-		_, e := fmt.Fprintln(a.out, x)
+		_, e := fmt.Fprintln(a.out, safe(x))
 		return e
 	case model.Project:
 		a.projectLine(x)

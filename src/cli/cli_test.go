@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"github.com/AlviDervishaj/junior-assistant/src/config"
 	"os"
 	"path/filepath"
 	"testing"
@@ -142,5 +143,48 @@ func TestOptionsAfterArgumentsAndLiteralDashTitle(t *testing.T) {
 func TestSafeTerminalOutput(t *testing.T) {
 	if got := safe("hello\x1b[2J\n"); got != "hello\\u001b[2J\\u000a" {
 		t.Fatal(got)
+	}
+}
+
+func TestTerminalDiagnosticsEscapePathControlsButJSONPreservesThem(t *testing.T) {
+	dir := t.TempDir()
+	missing := filepath.Join(t.TempDir(), "missing\x1b]0;injected\x07")
+	missing, canonicalErr := config.Canonical(missing)
+	if canonicalErr != nil {
+		t.Fatal(canonicalErr)
+	}
+	var out, err bytes.Buffer
+	code := Run(context.Background(), []string{"--data-dir", dir, "root", "add", missing}, nil, &out, &err)
+	if code != 0 {
+		t.Fatalf("registration failed %d %s", code, &err)
+	}
+	if bytes.Contains(err.Bytes(), []byte{0x1b}) || bytes.Contains(err.Bytes(), []byte{0x07}) {
+		t.Fatal("warning emitted raw terminal controls")
+	}
+	if !bytes.Contains(err.Bytes(), []byte(`\u001b`)) {
+		t.Fatalf("warning did not escape path %s", &err)
+	}
+	out.Reset()
+	err.Reset()
+	code = Run(context.Background(), []string{"--data-dir", dir, "export", filepath.Join(missing, "backup.json")}, nil, &out, &err)
+	if code != 1 || bytes.Contains(err.Bytes(), []byte{0x1b}) {
+		t.Fatalf("error emitted raw controls: %d %s", code, &err)
+	}
+	backupPath := filepath.Join(t.TempDir(), "backup\x1b.json")
+	out.Reset()
+	err.Reset()
+	code = Run(context.Background(), []string{"--data-dir", dir, "export", backupPath}, nil, &out, &err)
+	if code != 0 || bytes.Contains(out.Bytes(), []byte{0x1b}) || !bytes.Contains(out.Bytes(), []byte(`\u001b`)) {
+		t.Fatalf("export output emitted raw controls: %d %s", code, &out)
+	}
+	data := invoke(t, dir, 0, "root", "list")
+	var roots []struct {
+		Path string `json:"path"`
+	}
+	if e := json.Unmarshal(data, &roots); e != nil {
+		t.Fatal(e)
+	}
+	if len(roots) != 1 || roots[0].Path != missing {
+		t.Fatal("JSON changed the original path")
 	}
 }
