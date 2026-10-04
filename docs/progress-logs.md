@@ -24,3 +24,5 @@ Implementation acceptance is tracked in [issue #10](https://github.com/AlviDervi
 ## Acceptance evidence
 
 On 2026-10-04, `go test -race ./...`, `go vet ./...`, and a CGo-disabled macOS arm64 build passed. The executable smoke harness passed 34 invocations with runtime network denied, including finished-task logs, append ordering, backup/restore history, and unchanged search fixture bytes. Dedicated tests verify V1 schema preservation, reopen idempotency, old backup restore, malformed history rejection, and unchanged notes/status.
+
+An additional compatibility check built the actual V1 source at commit `9f1c901` in a temporary directory. With network denied, V1 created/exported records; the new build migrated them and preserved notes; V1 then rejected schema 2; both new-build legacy restore and V1 rollback restore into separate state succeeded.
